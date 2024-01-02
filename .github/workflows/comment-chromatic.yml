@@ -1,0 +1,88 @@
+name: Comment to publish Storybook
+
+on:
+  issue_comment:
+    types:
+      - created
+      - edited
+
+jobs:
+  comment-chromatic:
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/storybook') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PR data
+        id: sha
+        uses: actions/github-script@latest
+        with:
+          script: |
+            const { owner, repo, number } = context.issue;
+            const pr = await github.pulls.get({
+              owner,
+              repo,
+              pull_number: number,
+            });
+            core.setOutput('sha', pr.data.head.sha)
+            core.setOutput('branch', pr.data.head.ref)
+            core.setOutput('sha_short', pr.data.head.sha.slice(0, 6))
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Make sure we fetch the PR branch, not main
+          ref: ${{ steps.sha.outputs.branch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: yarn
+      - name: Publish storybook to chromatic
+        id: chromatic
+        run: |
+          set +e
+          npx chromatic --only-changed
+          CHROMATIC_RESULT=$?
+          echo "::set-output name=chromatic_result::$CHROMATIC_RESULT"
+          exit $CHROMATIC_RESULT
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          CHROMATIC_SHA: ${{ steps.sha.outputs.sha }}
+          CHROMATIC_BRANCH: ${{ steps.sha.outputs.branch }}
+          NODE_ENV: storybook
+      - name: Reply to comment on Chromatic success
+        if: ${{ success() }}
+        uses: actions/github-script@latest
+        with:
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'See your last commit version of the storybook, [go to storybook](https://${{ steps.sha.outputs.sha_short }}--XXXXXXXXXXXX.chromatic.com/)' +
+                    '\n\n' +
+                    'Chromatic found no changes to review (or build was skipped).',
+            });
+      - name: Reply to comment on Chromatic review needed
+        if: ${{ failure() && steps.chromatic.outputs.chromatic_result == '1' }}
+        uses: actions/github-script@latest
+        with:
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'See your last commit version of the storybook, [go to storybook](https://${{ steps.sha.outputs.sha_short }}--XXXXXXXXXXXX.chromatic.com/).' +
+                    '\n\n' +
+                    'Chromatic found visual changes, a review is needed. [Go to Chromatic](https://www.chromatic.com/build?appId=XXXXXXXXXXXX) and select the last build to review the changes',
+            });
+      - name: Reply to comment on Chromatic failure
+        if: ${{ failure() && steps.chromatic.outputs.chromatic_result != '1' }}
+        uses: actions/github-script@latest
+        with:
+          script: |
+            github.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Failed Chromatic build. See [the Action logs](https://github.com/HypeCodeTeam/portals/actions/runs/${{ github.run_id }}) and click "comment-chromatic" to find out why.' +
+                    '\n\n' +
+                    'You can get help from [Chromatic CLI return status documentation](https://www.chromatic.com/docs/cli#exit-codes)',
+            });

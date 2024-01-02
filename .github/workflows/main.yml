@@ -1,0 +1,38 @@
+name: Build and Deploy - main
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - run: yarn
+      - run: npx semantic-release --debug
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    chromatic-storybook:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+        - uses: actions/setup-node@v4
+          with:
+            node-version: 18
+        - run: yarn
+        - uses: chromaui/action@latest
+          env:
+            NODE_ENV: storybook
+          with:
+            projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+            onlyChanged: true
