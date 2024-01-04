@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Get PR data
         id: sha
-        uses: actions/github-script@latest
+        uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo, number } = context.issue;
@@ -49,7 +49,7 @@ jobs:
           NODE_ENV: storybook
       - name: Reply to comment on Chromatic success
         if: ${{ success() }}
-        uses: actions/github-script@latest
+        uses: actions/github-script@v7
         with:
           script: |
             github.issues.createComment({
@@ -62,7 +62,7 @@ jobs:
             });
       - name: Reply to comment on Chromatic review needed
         if: ${{ failure() && steps.chromatic.outputs.chromatic_result == '1' }}
-        uses: actions/github-script@latest
+        uses: actions/github-script@v7
         with:
           script: |
             github.issues.createComment({
@@ -75,7 +75,7 @@ jobs:
             });
       - name: Reply to comment on Chromatic failure
         if: ${{ failure() && steps.chromatic.outputs.chromatic_result != '1' }}
-        uses: actions/github-script@latest
+        uses: actions/github-script@v7
         with:
           script: |
             github.issues.createComment({
